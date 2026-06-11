@@ -187,7 +187,7 @@ If a worker acquires the DB lock, transitions the job to `RUNNING`, then loses n
 Exponential backoff with jitter as specified:
 
 ```python
-delay = 2^attempt + random(0, 1)  # seconds
+delay = 2**attempt + random(0, 1)  # seconds
 ```
 
 **Why jitter?** Without it, if 100 jobs fail simultaneously they all retry at the same moment — a thundering herd that overwhelms the system. Jitter spreads retries across a window of time.
