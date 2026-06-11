@@ -211,12 +211,6 @@ Failing at definition time gives a clear error message. A cycle discovered at ex
 
 ---
 
-## Timeout Handling
-
-**Windows note:** Celery's built-in `time_limit` uses `SIGALRM` which is Unix-only. On Windows we use a Python `threading.Thread` with `join(timeout)`. The job runs in a daemon thread — if it exceeds `max_execution_time`, the main thread stops waiting and transitions the instance to `TIMEOUT`. The thread continues running in the background until it naturally ends (daemon threads don't block process exit).
-
----
-
 
 ## Running Tests
 
