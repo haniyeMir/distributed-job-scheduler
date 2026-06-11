@@ -1,0 +1,28 @@
+# Web framework
+Flask==3.0.3
+flask-socketio==5.3.6
+
+# Database
+SQLAlchemy==2.0.31
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.7
+psycopg2-binary==2.9.9
+
+# Task queue
+celery==5.4.0
+kombu==5.3.4
+
+# Redis
+redis==5.0.7
+
+# Cron parsing
+croniter==2.0.5
+
+# Environment
+python-dotenv==1.0.1
+
+# Validation
+marshmallow==3.21.3
+
+# Utilities
+requests==2.32.3

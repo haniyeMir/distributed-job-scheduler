@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Scheduler — Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0f1117; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; padding: 24px; }
+
+    h1 { font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+    .subtitle { font-size: 13px; color: #64748b; margin-bottom: 28px; }
+    .live-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e;
+      border-radius: 50%; margin-right: 6px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* STAT CARDS */
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .card { background: #1e2330; border: 1px solid #2d3748; border-radius: 12px; padding: 20px; }
+    .card-label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .card-value { font-size: 32px; font-weight: 700; color: #fff; }
+    .card-value.green { color: #22c55e; }
+    .card-value.red { color: #ef4444; }
+    .card-value.blue { color: #60a5fa; }
+
+    /* GRID LAYOUT */
+    .row { display: grid; gap: 16px; margin-bottom: 24px; }
+    .row-2 { grid-template-columns: 2fr 1fr; }
+    .row-2b { grid-template-columns: 1fr 1fr; }
+
+    .panel { background: #1e2330; border: 1px solid #2d3748; border-radius: 12px; padding: 20px; }
+    .panel h2 { font-size: 14px; font-weight: 600; color: #94a3b8; margin-bottom: 16px;
+      text-transform: uppercase; letter-spacing: .05em; }
+
+    /* QUEUE BARS */
+    .queue-item { margin-bottom: 14px; }
+    .queue-label { display: flex; justify-content: space-between; font-size: 13px;
+      color: #94a3b8; margin-bottom: 6px; }
+    .queue-bar-bg { background: #2d3748; border-radius: 4px; height: 8px; }
+    .queue-bar { height: 8px; border-radius: 4px; transition: width .5s ease; min-width: 2px; }
+    .bar-high { background: #ef4444; }
+    .bar-normal { background: #60a5fa; }
+    .bar-low { background: #94a3b8; }
+
+    /* WORKERS */
+    .worker-item { display: flex; align-items: center; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid #2d3748; font-size: 13px; }
+    .worker-item:last-child { border-bottom: none; }
+    .worker-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-active { background: #22c55e; }
+    .dot-idle { background: #64748b; }
+    .dot-offline { background: #ef4444; }
+    .worker-name { color: #e2e8f0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .worker-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+    .badge-active { background: #14532d; color: #22c55e; }
+    .badge-idle { background: #1e2330; color: #64748b; border: 1px solid #2d3748; }
+
+    /* INSTANCES TABLE */
+    .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    select, button { background: #2d3748; color: #e2e8f0; border: 1px solid #374151;
+      border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+    button:hover { background: #374151; }
+    button.active { background: #1d4ed8; border-color: #1d4ed8; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; color: #64748b; font-weight: 500;
+      border-bottom: 1px solid #2d3748; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    td { padding: 10px 12px; border-bottom: 1px solid #1a2035; color: #cbd5e1; }
+    tr:hover td { background: #252d3d; }
+
+    .status-badge { display: inline-block; font-size: 11px; padding: 2px 8px;
+      border-radius: 10px; font-weight: 500; }
+    .status-success { background: #14532d; color: #22c55e; }
+    .status-failed { background: #450a0a; color: #ef4444; }
+    .status-running { background: #1e3a5f; color: #60a5fa; }
+    .status-pending { background: #1c1917; color: #a8a29e; }
+    .status-queued { background: #2d1b69; color: #a78bfa; }
+    .status-timeout { background: #431407; color: #fb923c; }
+
+    /* GANTT */
+    .gantt-item { display: flex; align-items: center; gap: 10px;
+      margin-bottom: 10px; font-size: 12px; }
+    .gantt-label { width: 140px; color: #94a3b8; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+    .gantt-track { flex: 1; background: #2d3748; border-radius: 4px; height: 20px; position: relative; }
+    .gantt-bar { position: absolute; height: 100%; border-radius: 4px;
+      display: flex; align-items: center; padding: 0 6px;
+      font-size: 10px; color: #fff; white-space: nowrap; overflow: hidden; min-width: 2px; }
+    .gantt-success { background: #166534; }
+    .gantt-failed { background: #7f1d1d; }
+    .gantt-timeout { background: #7c2d12; }
+    .gantt-running { background: #1e3a5f; }
+
+    .empty { color: #475569; font-size: 13px; padding: 20px 0; text-align: center; }
+    #last-update { font-size: 11px; color: #475569; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+<h1><span class="live-dot"></span>Distributed Job Scheduler</h1>
+<p class="subtitle">Real-time monitoring dashboard</p>
+
+<!-- STAT CARDS -->
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Active Jobs</div>
+    <div class="card-value blue" id="active-jobs">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Currently Running</div>
+    <div class="card-value" id="currently-running">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Total Executions</div>
+    <div class="card-value" id="total-executions">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Success (24h)</div>
+    <div class="card-value green" id="success-24h">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Failed (24h)</div>
+    <div class="card-value red" id="failed-24h">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Total Jobs Defined</div>
+    <div class="card-value" id="total-jobs">—</div>
+  </div>
+</div>
+
+<!-- CHART + WORKERS -->
+<div class="row row-2">
+  <div class="panel">
+    <h2>Success vs Failed — Last 24h</h2>
+    <canvas id="chart" height="120"></canvas>
+  </div>
+  <div>
+    <!-- QUEUE DEPTH -->
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Queue Depth</h2>
+      <div class="queue-item">
+        <div class="queue-label"><span>High Priority</span><span id="q-high">0</span></div>
+        <div class="queue-bar-bg"><div class="queue-bar bar-high" id="bar-high" style="width:0%"></div></div>
+      </div>
+      <div class="queue-item">
+        <div class="queue-label"><span>Normal Priority</span><span id="q-normal">0</span></div>
+        <div class="queue-bar-bg"><div class="queue-bar bar-normal" id="bar-normal" style="width:0%"></div></div>
+      </div>
+      <div class="queue-item">
+        <div class="queue-label"><span>Low Priority</span><span id="q-low">0</span></div>
+        <div class="queue-bar-bg"><div class="queue-bar bar-low" id="bar-low" style="width:0%"></div></div>
+      </div>
+    </div>
+    <!-- WORKER HEALTH -->
+    <div class="panel">
+      <h2>Worker Health</h2>
+      <div id="workers-list"><div class="empty">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- GANTT TIMELINE -->
+<div class="panel" style="margin-bottom:24px">
+  <h2>Execution Timeline (last 20 runs)</h2>
+  <div id="gantt"></div>
+</div>
+
+<!-- INSTANCES TABLE -->
+<div class="panel">
+  <h2>Job Executions</h2>
+  <div class="filters">
+    <select id="filter-status" onchange="loadInstances()">
+      <option value="">All Statuses</option>
+      <option value="pending">Pending</option>
+      <option value="queued">Queued</option>
+      <option value="running">Running</option>
+      <option value="success">Success</option>
+      <option value="failed">Failed</option>
+      <option value="timeout">Timeout</option>
+    </select>
+    <select id="filter-hours" onchange="loadInstances()">
+      <option value="1">Last 1 hour</option>
+      <option value="6">Last 6 hours</option>
+      <option value="24" selected>Last 24 hours</option>
+      <option value="168">Last 7 days</option>
+    </select>
+    <button onclick="loadInstances()">↻ Refresh</button>
+  </div>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Job Name</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Attempt</th>
+          <th>Worker</th>
+          <th>Duration</th>
+          <th>Started</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody id="instances-tbody">
+        <tr><td colspan="8" class="empty">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="last-update"></div>
+</div>
+
+<script>
+  // ── WebSocket ──────────────────────────────────────────────────
+  const socket = io();
+
+  socket.on('connect', () => console.log('WebSocket connected'));
+  socket.on('disconnect', () => console.log('WebSocket disconnected'));
+
+  socket.on('stats_update', (data) => {
+    document.getElementById('active-jobs').textContent = data.active_jobs ?? '—';
+    document.getElementById('currently-running').textContent = data.currently_running ?? '—';
+    document.getElementById('total-executions').textContent = data.total_executions ?? '—';
+    document.getElementById('success-24h').textContent = data.success_24h ?? '—';
+    document.getElementById('failed-24h').textContent = data.failed_24h ?? '—';
+    document.getElementById('total-jobs').textContent = data.total_jobs ?? '—';
+  });
+
+  // ── Chart ──────────────────────────────────────────────────────
+  const ctx = document.getElementById('chart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Success', data: [], backgroundColor: '#166534', borderRadius: 4 },
+        { label: 'Failed', data: [], backgroundColor: '#7f1d1d', borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+      scales: {
+        x: { ticks: { color: '#475569', maxRotation: 45 }, grid: { color: '#1a2035' } },
+        y: { ticks: { color: '#475569' }, grid: { color: '#1a2035' }, beginAtZero: true },
+      },
+    },
+  });
+
+  async function loadChart() {
+    const res = await fetch('/api/dashboard/chart');
+    const json = await res.json();
+    chart.data.labels = json.data.map(d => d.hour);
+    chart.data.datasets[0].data = json.data.map(d => d.success);
+    chart.data.datasets[1].data = json.data.map(d => d.failed);
+    chart.update();
+  }
+
+  // ── Queue Depth ────────────────────────────────────────────────
+  async function loadQueues() {
+    const res = await fetch('/api/dashboard/queues');
+    const json = await res.json();
+    const q = json.queues;
+    const max = Math.max(q.high + q.normal + q.low, 1);
+    ['high', 'normal', 'low'].forEach(p => {
+      document.getElementById(`q-${p}`).textContent = q[p];
+      document.getElementById(`bar-${p}`).style.width =
+        Math.max((q[p] / max) * 100, q[p] > 0 ? 5 : 0) + '%';
+    });
+  }
+
+  // ── Worker Health ──────────────────────────────────────────────
+  async function loadWorkers() {
+    const res = await fetch('/api/dashboard/workers');
+    const json = await res.json();
+    const el = document.getElementById('workers-list');
+
+    if (!json.workers.length) {
+      el.innerHTML = '<div class="empty">No workers detected</div>';
+      return;
+    }
+    el.innerHTML = json.workers.map(w => `
+      <div class="worker-item">
+        <div class="worker-dot dot-${w.status}"></div>
+        <div class="worker-name">${w.name}</div>
+        <span class="worker-badge badge-${w.status}">${w.status}</span>
+        ${w.active_tasks ? `<span style="font-size:11px;color:#64748b">${w.active_tasks} task(s)</span>` : ''}
+      </div>
+    `).join('');
+  }
+
+  // ── Gantt Timeline ─────────────────────────────────────────────
+  async function loadTimeline() {
+    const res = await fetch('/api/dashboard/timeline');
+    const json = await res.json();
+    const el = document.getElementById('gantt');
+
+    if (!json.timeline.length) {
+      el.innerHTML = '<div class="empty">No completed executions yet</div>';
+      return;
+    }
+
+    // Find time range for normalizing bar positions
+    const times = json.timeline.flatMap(t => [
+      new Date(t.started_at).getTime(),
+      new Date(t.finished_at).getTime(),
+    ]);
+    const minT = Math.min(...times);
+    const maxT = Math.max(...times);
+    const range = maxT - minT || 1;
+
+    el.innerHTML = json.timeline.map(t => {
+      const start = (new Date(t.started_at).getTime() - minT) / range * 100;
+      const width = Math.max(
+        (new Date(t.finished_at).getTime() - new Date(t.started_at).getTime()) / range * 100,
+        0.5
+      );
+      const dur = t.duration_seconds ? t.duration_seconds.toFixed(1) + 's' : '';
+      return `
+        <div class="gantt-item">
+          <div class="gantt-label" title="${t.job_name}">${t.job_name}</div>
+          <div class="gantt-track">
+            <div class="gantt-bar gantt-${t.status}"
+                 style="left:${start}%;width:${width}%"
+                 title="${t.status} — ${dur}">
+              ${dur}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ── Instances Table ────────────────────────────────────────────
+  async function loadInstances() {
+    const status = document.getElementById('filter-status').value;
+    const hours = document.getElementById('filter-hours').value;
+    const params = new URLSearchParams({ hours });
+    if (status) params.append('status', status);
+
+    const res = await fetch(`/api/dashboard/instances?${params}`);
+    const json = await res.json();
+    const tbody = document.getElementById('instances-tbody');
+
+    if (!json.instances.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No executions found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = json.instances.map(inst => `
+      <tr>
+        <td>${inst.job_name}</td>
+        <td style="color:#64748b">${inst.job_type}</td>
+        <td><span class="status-badge status-${inst.status}">${inst.status}</span></td>
+        <td style="color:#64748b">${inst.attempt}</td>
+        <td style="color:#64748b;font-size:11px">${inst.worker_id ?? '—'}</td>
+        <td>${inst.duration_seconds ? inst.duration_seconds.toFixed(2) + 's' : '—'}</td>
+        <td style="color:#64748b;font-size:11px">
+          ${inst.started_at ? new Date(inst.started_at).toLocaleTimeString() : '—'}
+        </td>
+        <td style="color:#ef4444;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">
+          ${inst.error_message ?? ''}
+        </td>
+      </tr>
+    `).join('');
+
+    document.getElementById('last-update').textContent =
+      `Last updated: ${new Date().toLocaleTimeString()} — ${json.instances.length} rows`;
+  }
+
+  // ── Init + polling ─────────────────────────────────────────────
+  async function refreshAll() {
+    await Promise.all([
+      loadChart(),
+      loadQueues(),
+      loadWorkers(),
+      loadTimeline(),
+      loadInstances(),
+    ]);
+  }
+
+  refreshAll();
+  // Refresh slower-changing panels every 10 seconds
+  setInterval(() => {
+    loadChart();
+    loadQueues();
+    loadWorkers();
+    loadTimeline();
+  }, 10000);
+  // Refresh instances table every 5 seconds
+  setInterval(loadInstances, 5000);
+</script>
+</body>
+</html>
