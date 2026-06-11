@@ -33,6 +33,7 @@ docker-compose up --build
 Open `http://localhost:5000` for the dashboard.
 The dashboard interface can be seen in the screenshot below:
 
+<img width="2544" height="1278" alt="Screenshot 2026-06-11 143812" src="https://github.com/user-attachments/assets/04b94360-ec7e-44e5-8792-4f36be799b65" />
 
 
 ### Scale workers
